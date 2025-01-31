@@ -3,6 +3,37 @@ default:
     - name: OTEL_COLLECTOR_NAME
       value: ${OTEL_COLLECTOR_NAME}
 
+components:
+  flagd:
+    resources:
+      requests:
+        cpu : 100m
+        memory: 128Mi
+      limits:
+        cpu: 1000m
+        memory: 128Mi
+    sidecarContainers:
+      - name: flagdui
+        useDefault:
+          env: true
+        service:
+          port: 4000
+        env:
+          - name: FLAGD_METRICS_EXPORTER
+            value: otel
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://$(OTEL_COLLECTOR_NAME):4318
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 1000m
+            memory: 128Mi
+        volumeMounts:
+          - name: config-rw
+            mountPath: /app/data
+
 # Disable Monitoring Infra components since we already have our own.
 # We use default.envOverrides to send telemetry to our own Observability stack.
 opentelemetry-collector:
