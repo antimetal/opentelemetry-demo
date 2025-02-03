@@ -33,16 +33,3 @@ components:
         volumeMounts:
           - name: config-rw
             mountPath: /app/data
-
-# Disable Monitoring Infra components since we already have our own.
-# We use default.envOverrides to send telemetry to our own Observability stack.
-# opentelemetry-collector:
-#   enabled: false
-# jaeger:
-#   enabled: false
-# prometheus:
-#   enabled: false
-# grafana:
-#   enabled: false
-# opensearch:
-#   enabled: false
