@@ -264,6 +264,7 @@ endif
 .PHONY: kubernetes-preview-deploy
 kubernetes-preview-deploy: helm-update
 	OTEL_COLLECTOR_NAME=$(OTEL_COLLECTOR_NAME) \
+	KUBERNETES_NAMESPACE=$(KUBERNETES_NAMESPACE) \
 		envsubst < chart/values.tmpl.yaml | \
 		$(HELM_CMD) template opentelemetry-demo $(HELM_REPO_NAME)/$(HELM_CHART_NAME) \
 			--namespace $(KUBERNETES_NAMESPACE) \
@@ -272,6 +273,7 @@ kubernetes-preview-deploy: helm-update
 .PHONY: kubernetes-deploy
 kubernetes-deploy: helm-update
 	OTEL_COLLECTOR_NAME=$(OTEL_COLLECTOR_NAME) \
+	KUBERNETES_NAMESPACE=$(KUBERNETES_NAMESPACE) \
 		envsubst < chart/values.tmpl.yaml | \
 		$(HELM_CMD) upgrade --install opentelemetry-demo $(HELM_REPO_NAME)/$(HELM_CHART_NAME) \
 			--namespace $(KUBERNETES_NAMESPACE) \
