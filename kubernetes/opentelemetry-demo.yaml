@@ -9627,6 +9627,7 @@ spec:
           resources:
             limits:
               memory: 300Mi
+              cpu: 3600m # set limit to 3.6 cores to trigger cpu throttling
           volumeMounts:
       volumes:
 ---
