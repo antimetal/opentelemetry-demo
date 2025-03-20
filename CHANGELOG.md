@@ -7,6 +7,28 @@ the release.
 
 ## Unreleased
 
+* [frontend] Update OpenTelemetry Browser SDK initialization
+  ([#2092](https://github.com/open-telemetry/opentelemetry-demo/pull/2092))
+* [quote] Updated open-telemetry/exporter-otlp to 1.2.1 which includes the
+  fix for `IS_REMOTE` flag feature
+  ([#2112](https://github.com/open-telemetry/opentelemetry-demo/pull/2112))
+* [load-generator] Change OpenFeature Evaluation to Remote Evaluation Protocol,
+  based on [this issue in OpenFeature/python-sdk-contrib](https://github.com/open-feature/python-sdk-contrib/issues/198)
+  ([#2114](https://github.com/open-telemetry/opentelemetry-demo/pull/2114))
+* [flagd-ui] increase memory to 100MB
+  ([#2120](https://github.com/open-telemetry/opentelemetry-demo/pull/2120))
+
+## 2.0.1
+
+* [chore] Use Linkspector to check links
+  ([#2070](https://github.com/open-telemetry/opentelemetry-demo/pull/2070))
+* [frontend] Cypress tests base image updated to 14.0.3
+  ([#2072](https://github.com/open-telemetry/opentelemetry-demo/pull/2072))
+* [grafana] Update dashboards with service map
+  ([#2085](https://github.com/open-telemetry/opentelemetry-demo/pull/2085))
+
+## 2.0.0
+
 * [grafana] Update grafana to 11.3.0
   ([#1764](https://github.com/open-telemetry/opentelemetry-demo/pull/1764))
 * [chore] Move build args to .env file
@@ -76,12 +98,20 @@ the release.
   ([#1919](https://github.com/open-telemetry/opentelemetry-demo/pull/1919))
 * [flagd-ui] fixed eslint ignore comment with useCallback
   ([#1923](https://github.com/open-telemetry/opentelemetry-demo/pull/1923))
+* [frontend-proxy] fix envoy access logs
+  ([#1930](https://github.com/open-telemetry/opentelemetry-demo/pull/1930))
 * [chore] Add memory for frontend-proxy, kafka, grafana, opensearch
   ([#1931](https://github.com/open-telemetry/opentelemetry-demo/pull/1931))
 * [frontendproxy] fix Docker compose DNS resolver with envoy 1.32
   ([#1936](https://github.com/open-telemetry/opentelemetry-demo/pull/1936))
 * [chore] Generate protobuf code for Typescript service - Frontend
   ([#1954](https://github.com/open-telemetry/opentelemetry-demo/pull/1954))
+* [accounting] bump OpenTelemetry .NET Automatic Instrumentation to 1.10.0
+  ([#1998](https://github.com/open-telemetry/opentelemetry-demo/pull/1998))
+* [frontend] update to Node 22
+  ([#2025](https://github.com/open-telemetry/opentelemetry-demo/pull/2025))
+* [frontend] move page titles to individual pages
+  ([#2025](https://github.com/open-telemetry/opentelemetry-demo/pull/2025))
 
 ## 1.12.0
 

@@ -71,16 +71,24 @@ yamllint: install-yamllint
 .PHONY: checklicense
 checklicense:
 	@echo "Checking license headers..."
+	@if ! npm ls @kt3k/license-checker; then npm install; fi
 	npx @kt3k/license-checker -q
 
 .PHONY: addlicense
 addlicense:
 	@echo "Adding license headers..."
+	@if ! npm ls @kt3k/license-checker; then npm install; fi
 	npx @kt3k/license-checker -q -i
+
+.PHONY: checklinks
+checklinks:
+	@echo "Checking links..."
+	@if ! npm ls @umbrelladocs/linkspector; then npm install; fi
+	linkspector check
 
 # Run all checks in order of speed / likely failure.
 .PHONY: check
-check: misspell markdownlint checklicense
+check: misspell markdownlint checklicense checklinks
 	@echo "All checks complete"
 
 # Attempt to fix issues / regenerate tables.
@@ -123,6 +131,17 @@ build-multiplatform:
 build-multiplatform-and-push:
     # Because buildx bake does not support --env-file yet, we need to load it into the environment first.
 	set -a; . ./.env.override; set +a && docker buildx bake -f docker-compose.yml --push --set "*.platform=linux/amd64,linux/arm64"
+
+.PHONY: clean-images
+clean-images:
+	@docker rmi $(shell docker images --filter=reference="ghcr.io/open-telemetry/demo:latest-*" -q); \
+    if [ $$? -ne 0 ]; \
+    then \
+    	echo; \
+        echo "Failed to removed 1 or more OpenTelemetry Demo images."; \
+        echo "Check to ensure the Demo is not running by executing: make stop"; \
+        false; \
+    fi
 
 .PHONY: run-tests
 run-tests:
