@@ -19,7 +19,7 @@ components:
         cpu: 1000m
         memory: 128Mi
     sidecarContainers:
-      - name: flagdui
+      - name: flagd-ui
         useDefault:
           env: true
         service:
