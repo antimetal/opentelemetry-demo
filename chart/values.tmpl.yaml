@@ -41,3 +41,11 @@ components:
         volumeMounts:
           - name: config-rw
             mountPath: /app/data
+opentelemetry-collector:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 1000Mi
+    limits:
+      cpu: 1000m
+      memory: 1000Mi
