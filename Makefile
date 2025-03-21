@@ -21,8 +21,6 @@ HELM_CHART_NAME ?= opentelemetry-demo
 
 KUBERNETES_NAMESPACE ?= otel-demo
 
-OTEL_COLLECTOR_NAME ?= opentelemetry-demo-otelcol
-
 # Java Workaround for macOS 15.2+ and M4 chips (see https://bugs.openjdk.org/browse/JDK-8345296)
 ifeq ($(shell uname -m),arm64)
 	ifeq ($(shell uname -s),Darwin)
@@ -263,7 +261,6 @@ endif
 
 .PHONY: kubernetes-preview-deploy
 kubernetes-preview-deploy: helm-update
-	OTEL_COLLECTOR_NAME=$(OTEL_COLLECTOR_NAME) \
 	KUBERNETES_NAMESPACE=$(KUBERNETES_NAMESPACE) \
 		envsubst < chart/values.tmpl.yaml | \
 		$(HELM_CMD) template opentelemetry-demo $(HELM_REPO_NAME)/$(HELM_CHART_NAME) \
@@ -272,7 +269,6 @@ kubernetes-preview-deploy: helm-update
 
 .PHONY: kubernetes-deploy
 kubernetes-deploy: helm-update
-	OTEL_COLLECTOR_NAME=$(OTEL_COLLECTOR_NAME) \
 	KUBERNETES_NAMESPACE=$(KUBERNETES_NAMESPACE) \
 		envsubst < chart/values.tmpl.yaml | \
 		$(HELM_CMD) upgrade --install opentelemetry-demo $(HELM_REPO_NAME)/$(HELM_CHART_NAME) \
