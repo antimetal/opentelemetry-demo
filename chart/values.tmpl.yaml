@@ -11,6 +11,7 @@ default:
           fieldPath: "metadata.labels['app.kubernetes.io/name']"
     - name: OTEL_RESOURCE_ATTRIBUTES
       value: 'service.name=$(OTEL_SERVICE_NAME),service.namespace=opentelemetry-demo,service.version={{ .Chart.AppVersion }},deployment.environment.name=${KUBERNETES_NAMESPACE}'
+
 components:
   flagd:
     resources:
@@ -41,6 +42,7 @@ components:
         volumeMounts:
           - name: config-rw
             mountPath: /app/data
+
 opentelemetry-collector:
   resources:
     requests:
@@ -49,3 +51,13 @@ opentelemetry-collector:
     limits:
       cpu: 1000m
       memory: 1000Mi
+
+prometheus:
+  server:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 1000Mi
+      limits:
+        cpu: 1000m
+        memory: 1000Mi
