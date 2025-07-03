@@ -14,6 +14,7 @@ import org.apache.logging.log4j.Logger
 import oteldemo.Demo.*
 import java.time.Duration.ofMillis
 import java.util.*
+import java.util.concurrent.Executors
 import kotlin.system.exitProcess
 import dev.openfeature.contrib.providers.flagd.FlagdOptions
 import dev.openfeature.contrib.providers.flagd.FlagdProvider
@@ -39,32 +40,53 @@ fun main() {
     props[KEY_DESERIALIZER_CLASS_CONFIG] = StringDeserializer::class.java.name
     props[VALUE_DESERIALIZER_CLASS_CONFIG] = ByteArrayDeserializer::class.java.name
     props[GROUP_ID_CONFIG] = groupID
+    props[MAX_POLL_RECORDS_CONFIG] = "500"  // Process up to 500 records per poll
+    props[ENABLE_AUTO_COMMIT_CONFIG] = "false"  // Manual commit for better control
+    props[MAX_POLL_INTERVAL_MS_CONFIG] = "300000"  // 5 minutes
+    props[SESSION_TIMEOUT_MS_CONFIG] = "45000"  // 45 seconds
+    props[FETCH_MIN_BYTES_CONFIG] = "1024"  // Wait for at least 1KB
+    props[MAX_PARTITION_FETCH_BYTES_CONFIG] = "1048576"  // 1MB per partition
+    
     val bootstrapServers = System.getenv("KAFKA_ADDR")
     if (bootstrapServers == null) {
         println("KAFKA_ADDR is not supplied")
         exitProcess(1)
     }
     props[BOOTSTRAP_SERVERS_CONFIG] = bootstrapServers
+    
     val consumer = KafkaConsumer<String, ByteArray>(props).apply {
         subscribe(listOf(topic))
     }
 
+    val executor = Executors.newFixedThreadPool(4)  // 4 parallel processors
     var totalCount = 0L
 
     consumer.use {
         while (true) {
-            totalCount = consumer
-                .poll(ofMillis(100))
-                .fold(totalCount) { accumulator, record ->
-                    val newCount = accumulator + 1
-                    if (getFeatureFlagValue("kafkaQueueProblems") > 0) {
-                        logger.info("FeatureFlag 'kafkaQueueProblems' is enabled, sleeping 1 second")
-                        Thread.sleep(1000)
+            try {
+                val records = consumer.poll(ofMillis(1000))
+                if (!records.isEmpty) {
+                    val futures = records.map { record ->
+                        executor.submit {
+                            try {
+                                val orders = OrderResult.parseFrom(record.value())
+                                logger.info("Processing orderId: ${orders.orderId}")
+                            } catch (e: Exception) {
+                                logger.error("Failed to process record", e)
+                            }
+                        }
                     }
-                    val orders = OrderResult.parseFrom(record.value())
-                    logger.info("Consumed record with orderId: ${orders.orderId}, and updated total count to: $newCount")
-                    newCount
+                    
+                    // Wait for all to complete
+                    futures.forEach { it.get() }
+                    consumer.commitSync()
+                    totalCount += records.count()
+                    logger.info("Committed ${records.count()} records, total processed: $totalCount")
                 }
+            } catch (e: Exception) {
+                logger.error("Error polling/processing records", e)
+                Thread.sleep(1000)  // Brief pause on error
+            }
         }
     }
 }
