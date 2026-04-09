@@ -642,13 +642,18 @@ func createProducerSpan(ctx context.Context, msg *sarama.ProducerMessage) trace.
 func (cs *checkout) isFeatureFlagEnabled(ctx context.Context, featureFlagName string) bool {
 	client := openfeature.NewClient("checkout")
 
-	// Default value is set to false, but you could also make this a parameter.
-	featureEnabled, _ := client.BooleanValue(
-		ctx,
+	flagCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+
+	featureEnabled, err := client.BooleanValue(
+		flagCtx,
 		featureFlagName,
 		false,
 		openfeature.EvaluationContext{},
 	)
+	if err != nil {
+		log.Warnf("feature flag %q evaluation failed, using default: %v", featureFlagName, err)
+	}
 
 	return featureEnabled
 }
@@ -656,13 +661,18 @@ func (cs *checkout) isFeatureFlagEnabled(ctx context.Context, featureFlagName st
 func (cs *checkout) getIntFeatureFlag(ctx context.Context, featureFlagName string) int {
 	client := openfeature.NewClient("checkout")
 
-	// Default value is set to 0, but you could also make this a parameter.
-	featureFlagValue, _ := client.IntValue(
-		ctx,
+	flagCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+
+	featureFlagValue, err := client.IntValue(
+		flagCtx,
 		featureFlagName,
 		0,
 		openfeature.EvaluationContext{},
 	)
+	if err != nil {
+		log.Warnf("feature flag %q evaluation failed, using default: %v", featureFlagName, err)
+	}
 
 	return int(featureFlagValue)
 }
