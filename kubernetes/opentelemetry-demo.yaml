@@ -11590,6 +11590,19 @@ spec:
           resources:
             limits:
               memory: 20Mi
+          livenessProbe:
+            grpc:
+              port: 8080
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+            initialDelaySeconds: 15
+          startupProbe:
+            grpc:
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           volumeMounts:
       initContainers:
         - command:
