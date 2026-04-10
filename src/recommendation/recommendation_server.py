@@ -36,7 +36,15 @@ from metrics import (
     init_metrics
 )
 
-cached_ids = []
+import time as _time
+import threading
+
+CACHE_TTL_SECONDS = 30
+_cache = {
+    "product_ids": [],
+    "last_updated": 0.0,
+}
+_cache_lock = threading.Lock()
 first_run = True
 
 class RecommendationService(demo_pb2_grpc.RecommendationServiceServicer):
@@ -66,7 +74,6 @@ class RecommendationService(demo_pb2_grpc.RecommendationServiceServicer):
 
 def get_product_list(request_product_ids):
     global first_run
-    global cached_ids
     with tracer.start_as_current_span("get_product_list") as span:
         max_responses = 5
 
@@ -74,22 +81,32 @@ def get_product_list(request_product_ids):
         request_product_ids_str = ''.join(request_product_ids)
         request_product_ids = request_product_ids_str.split(',')
 
-        # Feature flag scenario - Cache Leak
+        # Feature flag scenario - Cache with TTL-based eviction
         if check_feature_flag("recommendationCacheFailure"):
             span.set_attribute("app.recommendation.cache_enabled", True)
-            if random.random() < 0.5 or first_run:
-                first_run = False
-                span.set_attribute("app.cache_hit", False)
-                logger.info("get_product_list: cache miss")
-                cat_response = product_catalog_stub.ListProducts(demo_pb2.Empty())
-                response_ids = [x.id for x in cat_response.products]
-                cached_ids = cached_ids + response_ids
-                cached_ids = cached_ids + cached_ids[:len(cached_ids) // 4]
-                product_ids = cached_ids
-            else:
-                span.set_attribute("app.cache_hit", True)
-                logger.info("get_product_list: cache hit")
-                product_ids = cached_ids
+
+            with _cache_lock:
+                now = _time.time()
+                cache_age = now - _cache["last_updated"]
+                cache_is_stale = cache_age > CACHE_TTL_SECONDS
+
+                if cache_is_stale or first_run or not _cache["product_ids"]:
+                    first_run = False
+                    span.set_attribute("app.cache_hit", False)
+                    logger.info("get_product_list: cache miss")
+                    rec_svc_metrics["app_cache_miss_counter"].add(1)
+                    refresh_start = _time.time()
+                    cat_response = product_catalog_stub.ListProducts(demo_pb2.Empty())
+                    response_ids = [x.id for x in cat_response.products]
+                    _cache["product_ids"] = response_ids
+                    _cache["last_updated"] = now
+                    product_ids = response_ids
+                    rec_svc_metrics["app_cache_refresh_duration"].record(_time.time() - refresh_start)
+                else:
+                    span.set_attribute("app.cache_hit", True)
+                    logger.info("get_product_list: cache hit")
+                    rec_svc_metrics["app_cache_hit_counter"].add(1)
+                    product_ids = _cache["product_ids"]
         else:
             span.set_attribute("app.recommendation.cache_enabled", False)
             cat_response = product_catalog_stub.ListProducts(demo_pb2.Empty())
@@ -123,7 +140,7 @@ def must_map_env(key: str):
 def check_feature_flag(flag_name: str):
     # Initialize OpenFeature
     client = api.get_client()
-    return client.get_boolean_value("recommendationCacheFailure", False)
+    return client.get_boolean_value(flag_name, False)
 
 
 if __name__ == "__main__":
