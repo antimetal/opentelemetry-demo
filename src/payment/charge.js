@@ -12,6 +12,12 @@ const logger = require('./logger');
 const tracer = trace.getTracer('payment');
 const meter = metrics.getMeter('payment');
 const transactionsCounter = meter.createCounter('app.payment.transactions');
+const paymentFailureFlagCounter = meter.createCounter('app.payment.failure_flag_evaluations', {
+  description: 'Count of requests where paymentFailure flag was active (value > 0)',
+});
+const paymentFailureInducedCounter = meter.createCounter('app.payment.failure_flag_induced', {
+  description: 'Count of payment failures induced by the paymentFailure feature flag',
+});
 
 const LOYALTY_LEVEL = ['platinum', 'gold', 'silver', 'bronze'];
 
@@ -29,12 +35,24 @@ module.exports.charge = async request => {
   const numberVariant =  await OpenFeature.getClient().getNumberValue("paymentFailure", 0);
 
   if (numberVariant > 0) {
-    // n% chance to fail with app.loyalty.level=gold
-    if (Math.random() < numberVariant) {
-      span.setAttributes({'app.loyalty.level': 'gold' });
-      span.end();
+    logger.warn({ flag: 'paymentFailure', failureRate: numberVariant }, 'paymentFailure feature flag is active — injecting failures');
+    paymentFailureFlagCounter.add(1, { 'app.payment.flag_active': true });
 
-      throw new Error('Payment request failed. Invalid token. app.loyalty.level=gold');
+    const allowFailureInjection = ['test', 'development', 'staging'].includes(
+      (process.env.ENVIRONMENT || process.env.NODE_ENV || '').toLowerCase()
+    );
+
+    if (!allowFailureInjection) {
+      logger.error({ flag: 'paymentFailure', failureRate: numberVariant }, 'paymentFailure flag is active in a non-test environment — ignoring to protect production traffic');
+    } else {
+      // n% chance to fail with app.loyalty.level=gold
+      if (Math.random() < numberVariant) {
+        span.setAttributes({'app.loyalty.level': 'gold' });
+        paymentFailureInducedCounter.add(1, { 'app.payment.failure_reason': 'feature_flag' });
+        span.end();
+
+        throw new Error('Payment request failed. Invalid token. app.loyalty.level=gold');
+      }
     }
   }
 
