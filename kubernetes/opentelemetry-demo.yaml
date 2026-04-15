@@ -769,7 +769,7 @@ data:
       "flags": {
         "productCatalogFailure": {
           "description": "Fail product catalog service on a specific product",
-          "state": "ENABLED",
+          "state": "DISABLED",
           "variants": {
             "on": true,
             "off": false
@@ -846,7 +846,7 @@ data:
         },
         "paymentUnreachable": {
           "description": "Payment service is unavailable",
-          "state": "ENABLED",
+          "state": "DISABLED",
           "variants": {
             "on": true,
             "off": false
@@ -12576,8 +12576,12 @@ spec:
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.name=$(OTEL_SERVICE_NAME),service.namespace=opentelemetry-demo,service.version=2.0.2
           resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
             limits:
-              memory: 500Mi
+              cpu: 500m
+              memory: 1Gi
           volumeMounts:
       volumes:
 ---
