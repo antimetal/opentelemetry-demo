@@ -32,12 +32,15 @@ import demo_pb2_grpc
 from grpc_health.v1 import health_pb2
 from grpc_health.v1 import health_pb2_grpc
 
+import sys
+
 from metrics import (
     init_metrics
 )
 
 cached_ids = []
 first_run = True
+MAX_CACHE_SIZE = 500
 
 class RecommendationService(demo_pb2_grpc.RecommendationServiceServicer):
     def ListRecommendations(self, request, context):
@@ -83,8 +86,7 @@ def get_product_list(request_product_ids):
                 logger.info("get_product_list: cache miss")
                 cat_response = product_catalog_stub.ListProducts(demo_pb2.Empty())
                 response_ids = [x.id for x in cat_response.products]
-                cached_ids = cached_ids + response_ids
-                cached_ids = cached_ids + cached_ids[:len(cached_ids) // 4]
+                cached_ids = response_ids[:MAX_CACHE_SIZE]
                 product_ids = cached_ids
             else:
                 span.set_attribute("app.cache_hit", True)
@@ -94,6 +96,15 @@ def get_product_list(request_product_ids):
             span.set_attribute("app.recommendation.cache_enabled", False)
             cat_response = product_catalog_stub.ListProducts(demo_pb2.Empty())
             product_ids = [x.id for x in cat_response.products]
+
+        # Track cache size for observability
+        cache_size = len(cached_ids)
+        cache_mem_bytes = sys.getsizeof(cached_ids)
+        span.set_attribute("app.cache.size", cache_size)
+        span.set_attribute("app.cache.memory_bytes", cache_mem_bytes)
+        rec_svc_metrics["app_cache_size_gauge"].set(cache_size)
+        if cache_size > MAX_CACHE_SIZE * 0.8:
+            logger.warning(f"Cache size approaching limit: {cache_size}/{MAX_CACHE_SIZE}")
 
         span.set_attribute("app.products.count", len(product_ids))
 
@@ -128,7 +139,12 @@ def check_feature_flag(flag_name: str):
 
 if __name__ == "__main__":
     service_name = must_map_env('OTEL_SERVICE_NAME')
-    api.set_provider(FlagdProvider(host=os.environ.get('FLAGD_HOST', 'flagd'), port=os.environ.get('FLAGD_PORT', 8013)))
+    api.set_provider(FlagdProvider(
+        host=os.environ.get('FLAGD_HOST', 'flagd'),
+        port=os.environ.get('FLAGD_PORT', 8013),
+        timeout=5,
+        retry_backoff_ms=1000,
+    ))
     api.add_hooks([TracingHook()])
 
     # Initialize Traces and Metrics
