@@ -38,6 +38,7 @@ from metrics import (
 
 cached_ids = []
 first_run = True
+MAX_CACHE_SIZE = 1000  # Safety guard: max number of product IDs to cache
 
 class RecommendationService(demo_pb2_grpc.RecommendationServiceServicer):
     def ListRecommendations(self, request, context):
@@ -74,7 +75,7 @@ def get_product_list(request_product_ids):
         request_product_ids_str = ''.join(request_product_ids)
         request_product_ids = request_product_ids_str.split(',')
 
-        # Feature flag scenario - Cache Leak
+        # Feature flag scenario - Cache Leak (fixed: bounded cache replacement instead of unbounded append)
         if check_feature_flag("recommendationCacheFailure"):
             span.set_attribute("app.recommendation.cache_enabled", True)
             if random.random() < 0.5 or first_run:
@@ -83,8 +84,11 @@ def get_product_list(request_product_ids):
                 logger.info("get_product_list: cache miss")
                 cat_response = product_catalog_stub.ListProducts(demo_pb2.Empty())
                 response_ids = [x.id for x in cat_response.products]
-                cached_ids = cached_ids + response_ids
-                cached_ids = cached_ids + cached_ids[:len(cached_ids) // 4]
+                cached_ids = response_ids
+                # Safety guard: truncate cache if it exceeds max size
+                if len(cached_ids) > MAX_CACHE_SIZE:
+                    logger.warning(f"get_product_list: cache size {len(cached_ids)} exceeds MAX_CACHE_SIZE {MAX_CACHE_SIZE}, truncating")
+                    cached_ids = cached_ids[:MAX_CACHE_SIZE]
                 product_ids = cached_ids
             else:
                 span.set_attribute("app.cache_hit", True)
