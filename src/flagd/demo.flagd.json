@@ -3,7 +3,7 @@
   "flags": {
     "productCatalogFailure": {
       "description": "Fail product catalog service on a specific product",
-      "state": "ENABLED",
+      "state": "DISABLED",
       "variants": {
         "on": true,
         "off": false
@@ -80,7 +80,7 @@
     },
     "paymentUnreachable": {
       "description": "Payment service is unavailable",
-      "state": "ENABLED",
+      "state": "DISABLED",
       "variants": {
         "on": true,
         "off": false

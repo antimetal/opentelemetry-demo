@@ -381,6 +381,9 @@ func mustCreateClient(svcAddr string) *grpc.ClientConn {
 	c, err := grpc.NewClient(svcAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithConnectParams(grpc.ConnectParams{
+			MinConnectTimeout: 5 * time.Second,
+		}),
 	)
 	if err != nil {
 		log.Fatalf("could not connect to %s service, err: %+v", svcAddr, err)
@@ -471,14 +474,20 @@ func (cs *checkout) convertCurrency(ctx context.Context, from *pb.Money, toCurre
 }
 
 func (cs *checkout) chargeCard(ctx context.Context, amount *pb.Money, paymentInfo *pb.CreditCardInfo) (string, error) {
+	// Apply a 5-second timeout to the payment call to prevent unbounded latency
+	// when the payment service is unreachable (e.g., DNS resolution failure).
+	chargeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	paymentService := cs.paymentSvcClient
-	if cs.isFeatureFlagEnabled(ctx, "paymentUnreachable") {
+	if cs.isFeatureFlagEnabled(chargeCtx, "paymentUnreachable") {
 		badAddress := "badAddress:50051"
 		c := mustCreateClient(badAddress)
+		defer c.Close()
 		paymentService = pb.NewPaymentServiceClient(c)
 	}
 
-	paymentResp, err := paymentService.Charge(ctx, &pb.ChargeRequest{
+	paymentResp, err := paymentService.Charge(chargeCtx, &pb.ChargeRequest{
 		Amount:     amount,
 		CreditCard: paymentInfo})
 	if err != nil {
