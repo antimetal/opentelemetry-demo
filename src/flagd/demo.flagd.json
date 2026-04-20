@@ -65,8 +65,8 @@
       "defaultVariant": "off"
     },
     "paymentFailure": {
-      "description": "Fail payment service charge requests n%",
-      "state": "ENABLED",
+      "description": "Fail payment service charge requests n% (chaos experiment; keep DISABLED outside of ad-hoc exercises)",
+      "state": "DISABLED",
       "variants": {
         "100%": 1,
         "90%": 0.95,
