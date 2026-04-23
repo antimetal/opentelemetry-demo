@@ -36,8 +36,10 @@ from metrics import (
     init_metrics
 )
 
+MAX_CACHE_IDS = int(os.getenv("RECOMMENDATION_CACHE_MAX_IDS", "5000"))
 cached_ids = []
 first_run = True
+
 
 class RecommendationService(demo_pb2_grpc.RecommendationServiceServicer):
     def ListRecommendations(self, request, context):
@@ -85,6 +87,8 @@ def get_product_list(request_product_ids):
                 response_ids = [x.id for x in cat_response.products]
                 cached_ids = cached_ids + response_ids
                 cached_ids = cached_ids + cached_ids[:len(cached_ids) // 4]
+                if len(cached_ids) > MAX_CACHE_IDS:
+                    cached_ids = cached_ids[-MAX_CACHE_IDS:]
                 product_ids = cached_ids
             else:
                 span.set_attribute("app.cache_hit", True)
