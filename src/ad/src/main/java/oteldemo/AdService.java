@@ -168,8 +168,16 @@ public final class AdService {
           logger.info("no baggage found in context");
         }
 
+        boolean adHighCpuEnabled =
+            ffClient.getBooleanValue(AD_HIGH_CPU_FEATURE_FLAG, false, evaluationContext);
+        boolean adManualGcEnabled =
+            ffClient.getBooleanValue(AD_MANUAL_GC_FEATURE_FLAG, false, evaluationContext);
+        boolean adProblemPatternsEnabled =
+            Boolean.parseBoolean(
+                System.getenv().getOrDefault("AD_PROBLEM_PATTERNS_ENABLED", "false"));
+
         CPULoad cpuload = CPULoad.getInstance();
-        cpuload.execute(ffClient.getBooleanValue(AD_HIGH_CPU_FEATURE_FLAG, false, evaluationContext));
+        cpuload.execute(adProblemPatternsEnabled && adHighCpuEnabled);
 
         span.setAttribute("app.ads.contextKeys", req.getContextKeysList().toString());
         span.setAttribute("app.ads.contextKeys.count", req.getContextKeysCount());
@@ -206,10 +214,15 @@ public final class AdService {
           throw new StatusRuntimeException(Status.UNAVAILABLE);
         }
 
-        if (ffClient.getBooleanValue(AD_MANUAL_GC_FEATURE_FLAG, false, evaluationContext)) {
+        if (adProblemPatternsEnabled && adManualGcEnabled) {
           logger.warn("Feature Flag " + AD_MANUAL_GC_FEATURE_FLAG + " enabled, performing a manual gc now");
           GarbageCollectionTrigger gct = new GarbageCollectionTrigger();
           gct.doExecute();
+        }
+
+        if (!adProblemPatternsEnabled && (adHighCpuEnabled || adManualGcEnabled)) {
+          logger.warn(
+              "Ad problem pattern flags are enabled but AD_PROBLEM_PATTERNS_ENABLED is false; skipping execution");
         }
 
         AdResponse reply = AdResponse.newBuilder().addAllAds(allAds).build();
@@ -320,6 +333,13 @@ public final class AdService {
   /** Main launches the server from the command line. */
   public static void main(String[] args) throws IOException, InterruptedException {
     // Start the RPC server. You shouldn't see any output from gRPC before this.
+    logger.info("Ad service starting.");
+    final AdService service = AdService.getInstance();
+    service.start();
+    service.blockUntilShutdown();
+  }
+}
+ut from gRPC before this.
     logger.info("Ad service starting.");
     final AdService service = AdService.getInstance();
     service.start();
