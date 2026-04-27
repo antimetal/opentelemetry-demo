@@ -85,6 +85,8 @@ def get_product_list(request_product_ids):
                 response_ids = [x.id for x in cat_response.products]
                 cached_ids = cached_ids + response_ids
                 cached_ids = cached_ids + cached_ids[:len(cached_ids) // 4]
+                # Keep failure-mode cache growth bounded to avoid OOM restarts.
+                cached_ids = cached_ids[-5000:]
                 product_ids = cached_ids
             else:
                 span.set_attribute("app.cache_hit", True)
