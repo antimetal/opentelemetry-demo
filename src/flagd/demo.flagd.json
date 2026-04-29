@@ -21,7 +21,7 @@
     },
     "adManualGc": {
       "description": "Triggers full manual garbage collections in the ad service",
-      "state": "ENABLED",
+      "state": "DISABLED",
       "variants": {
         "on": true,
         "off": false
@@ -30,7 +30,7 @@
     },
     "adHighCpu": {
       "description": "Triggers high cpu load in the ad service",
-      "state": "ENABLED",
+      "state": "DISABLED",
       "variants": {
         "on": true,
         "off": false
