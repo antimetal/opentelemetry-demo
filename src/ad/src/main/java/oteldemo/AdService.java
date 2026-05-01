@@ -136,6 +136,21 @@ public final class AdService {
     private static final String AD_MANUAL_GC_FEATURE_FLAG = "adManualGc";
     private static final String AD_HIGH_CPU_FEATURE_FLAG = "adHighCpu";
     private static final Client ffClient = OpenFeatureAPI.getInstance().getClient();
+
+    // Master switch for chaos/fault-injection feature flags. Unless ENABLE_FAULT_INJECTION
+    // is explicitly set to "true" in the environment, the adFailure / adManualGc
+    // code paths are skipped entirely — protecting production from accidental toggles.
+    private static final boolean FAULT_INJECTION_ENABLED =
+        Boolean.parseBoolean(
+            Optional.ofNullable(System.getenv("ENABLE_FAULT_INJECTION")).orElse("false"));
+
+    // Dedicated executor so manual GC cycles never run on a gRPC request thread.
+    private static final java.util.concurrent.ExecutorService GC_EXECUTOR =
+        java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+          Thread t = new Thread(r, "ad-manual-gc");
+          t.setDaemon(true);
+          return t;
+        });
     
     private AdServiceImpl() {}
 
@@ -201,15 +216,25 @@ public final class AdService {
             Attributes.of(
                 adRequestTypeKey, adRequestType.name(), adResponseTypeKey, adResponseType.name()));
 
-        // Throw 1/10 of the time to simulate a failure when the feature flag is enabled
-        if (ffClient.getBooleanValue(AD_FAILURE, false, evaluationContext) && random.nextInt(10) == 0) {
-          throw new StatusRuntimeException(Status.UNAVAILABLE);
-        }
+        // Chaos-injection feature flags (adFailure, adManualGc) must never run in
+        // production. They are gated behind the ENABLE_FAULT_INJECTION environment
+        // variable so that even if the flag is accidentally toggled on in flagd, the
+        // chaos code paths are inert unless explicitly opted-in by the deployment.
+        if (FAULT_INJECTION_ENABLED) {
+          // Throw 1/10 of the time to simulate a failure when the feature flag is enabled
+          if (ffClient.getBooleanValue(AD_FAILURE, false, evaluationContext) && random.nextInt(10) == 0) {
+            throw new StatusRuntimeException(Status.UNAVAILABLE);
+          }
 
-        if (ffClient.getBooleanValue(AD_MANUAL_GC_FEATURE_FLAG, false, evaluationContext)) {
-          logger.warn("Feature Flag " + AD_MANUAL_GC_FEATURE_FLAG + " enabled, performing a manual gc now");
-          GarbageCollectionTrigger gct = new GarbageCollectionTrigger();
-          gct.doExecute();
+          if (ffClient.getBooleanValue(AD_MANUAL_GC_FEATURE_FLAG, false, evaluationContext)) {
+            logger.warn("Feature Flag " + AD_MANUAL_GC_FEATURE_FLAG + " enabled, performing a manual gc now");
+            // Run the manual GC on a background executor so a stop-the-world pause
+            // cannot block the gRPC request thread and stall every in-flight GetAds call.
+            GC_EXECUTOR.submit(() -> {
+              GarbageCollectionTrigger gct = new GarbageCollectionTrigger();
+              gct.doExecute();
+            });
+          }
         }
 
         AdResponse reply = AdResponse.newBuilder().addAllAds(allAds).build();
