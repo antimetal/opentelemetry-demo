@@ -13,8 +13,10 @@ import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import oteldemo.Demo.*
 import java.time.Duration.ofMillis
+import java.time.Instant
 import java.util.*
 import kotlin.system.exitProcess
+import kotlin.math.min
 import dev.openfeature.contrib.providers.flagd.FlagdOptions
 import dev.openfeature.contrib.providers.flagd.FlagdProvider
 import dev.openfeature.sdk.Client
@@ -25,8 +27,12 @@ import dev.openfeature.sdk.OpenFeatureAPI
 
 const val topic = "orders"
 const val groupID = "fraud-detection"
+const val POLL_TIMEOUT_MS = 100L
+const val MAX_RETRIES = 3
+const val HEALTH_CHECK_THRESHOLD_MINUTES = 5L
 
 private val logger: Logger = LogManager.getLogger(groupID)
+private var lastMessageTime = Instant.now()
 
 fun main() {
     val options = FlagdOptions.builder()
@@ -50,23 +56,94 @@ fun main() {
     }
 
     var totalCount = 0L
+    var retryCount = 0
 
     consumer.use {
         while (true) {
-            totalCount = consumer
-                .poll(ofMillis(100))
-                .fold(totalCount) { accumulator, record ->
-                    val newCount = accumulator + 1
-                    if (getFeatureFlagValue("kafkaQueueProblems") > 0) {
-                        logger.info("FeatureFlag 'kafkaQueueProblems' is enabled, sleeping 1 second")
-                        Thread.sleep(1000)
-                    }
-                    val orders = OrderResult.parseFrom(record.value())
-                    logger.info("Consumed record with orderId: ${orders.orderId}, and updated total count to: $newCount")
-                    newCount
+            try {
+                val records = consumer.poll(ofMillis(POLL_TIMEOUT_MS))
+                
+                if (records.isEmpty) {
+                    logger.debug("No records received in polling cycle")
+                    continue
                 }
+                
+                // Reset retry count on successful poll
+                retryCount = 0
+                
+                records.forEach { record ->
+                    totalCount = processRecordWithRetry(record, totalCount)
+                }
+                
+                lastMessageTime = Instant.now()
+                
+            } catch (e: Exception) {
+                logger.error("Consumer error occurred", e)
+                retryCount++
+                
+                if (retryCount >= MAX_RETRIES) {
+                    logger.error("Max retries exceeded, consumer will exit")
+                    throw e
+                }
+                
+                // Exponential backoff with cap at 30 seconds
+                val backoffTime = min(1000L * retryCount, 30000L)
+                logger.warn("Retrying in ${backoffTime}ms (attempt $retryCount/$MAX_RETRIES)")
+                Thread.sleep(backoffTime)
+            }
         }
     }
+}
+
+/**
+ * Processes a single Kafka record with retry logic for parsing errors
+ */
+fun processRecordWithRetry(record: org.apache.kafka.clients.consumer.ConsumerRecord<String, ByteArray>, currentCount: Long): Long {
+    var attempts = 0
+    val maxAttempts = 3
+    
+    while (attempts < maxAttempts) {
+        try {
+            val newCount = currentCount + 1
+            
+            if (getFeatureFlagValue("kafkaQueueProblems") > 0) {
+                logger.info("FeatureFlag 'kafkaQueueProblems' is enabled, sleeping 1 second")
+                Thread.sleep(1000)
+            }
+            
+            val orders = OrderResult.parseFrom(record.value())
+            logger.info("Consumed record with orderId: ${orders.orderId}, and updated total count to: $newCount")
+            return newCount
+            
+        } catch (e: Exception) {
+            attempts++
+            logger.warn("Failed to process record (attempt $attempts/$maxAttempts)", e)
+            
+            if (attempts >= maxAttempts) {
+                logger.error("Max processing attempts exceeded for record, skipping")
+                return currentCount + 1 // Still increment count to avoid getting stuck
+            }
+            
+            // Short delay before retry
+            Thread.sleep(100)
+        }
+    }
+    
+    return currentCount
+}
+
+/**
+ * Health check function to verify consumer is actively processing messages
+ */
+fun isConsumerHealthy(): Boolean {
+    val timeSinceLastMessage = java.time.Duration.between(lastMessageTime, Instant.now())
+    val isHealthy = timeSinceLastMessage.toMinutes() <= HEALTH_CHECK_THRESHOLD_MINUTES
+    
+    if (!isHealthy) {
+        logger.warn("Consumer health check failed: no messages consumed in ${timeSinceLastMessage.toMinutes()} minutes")
+    }
+    
+    return isHealthy
 }
 
 /**
